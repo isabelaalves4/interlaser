@@ -575,10 +575,13 @@
    STATE
 ══════════════════════════════════════════ */
 var SESSION=null, LOGGED_EMAIL=localStorage.getItem('portalRH_email')||'';
-var API_URL = 'https://script.google.com/macros/s/AKfycbwWWcSrFNtZi01XAkDSBCARALjBaaw490oVcCtxC3pjw3P2W7nrckqW8f8AWq3AT54t/exec';
+var API_URL = 'https://script.google.com/macros/s/AKfycbwSEzuKnQJp7-tNC02thE6GDveSESZrF5V493P7fMqCAIGUBeVLq5V9evIOm3qGSCr9Tg/exec';
 var _colabCache=[], _docsCache=[], _myDocsCache=[], _myDocTypesCache=[];
 var _muralCache=[], _integracaoCache=[];
 var JS_DEBUG=false;
+var __rpcSeq=0;
+var __rpcPending={};
+var __rpcListenerReady=false;
 
 /* paginação */
 var PAGE_SIZE = 25; // ✅ FIX #1: limite de 25 por página
@@ -637,6 +640,29 @@ function setApiUrl(url) {
   else localStorage.removeItem('portalRH_apiUrl');
 }
 
+function ensureRpcListener_(){
+  if(__rpcListenerReady) return;
+  __rpcListenerReady = true;
+  window.addEventListener('message', function(event){
+    try {
+      var msg = event.data;
+      if(typeof msg === 'string') {
+        try { msg = JSON.parse(msg); } catch(_) { return; }
+      }
+      if(!msg || !msg.__portalRH_rpc || !msg.token) return;
+      var pending = __rpcPending[msg.token];
+      if(!pending) return;
+      clearTimeout(pending.timeoutId);
+      try { pending.resolve(msg.response || {ok:false, message:'Resposta vazia.'}); }
+      finally {
+        if(pending.iframe && pending.iframe.parentNode) pending.iframe.parentNode.removeChild(pending.iframe);
+        if(pending.form && pending.form.parentNode) pending.form.parentNode.removeChild(pending.form);
+        delete __rpcPending[msg.token];
+      }
+    } catch(_) {}
+  });
+}
+
 function callServer(fn, payload) {
   return new Promise(function(resolve) {
     try {
@@ -645,43 +671,56 @@ function callServer(fn, payload) {
         return;
       }
 
-      fetch(API_URL, {
-        method: 'POST',
-        redirect: 'follow',
-        headers: {
-          'Content-Type': 'text/plain;charset=utf-8'
-        },
-        body: JSON.stringify({
-          action: fn,
-          payload: payload === undefined ? null : payload,
-          origin: window.location.origin,
-          ts: Date.now()
-        })
-      })
-      .then(function(response) {
-        return response.text().then(function(text) {
-          return { okResponse: response.ok, status: response.status, text: text };
-        });
-      })
-      .then(function(result) {
-        var text = result.text || '';
-        if(!text) {
-          resolve({ok:false, message:'Servidor retornou resposta vazia.'});
-          return;
-        }
+      ensureRpcListener_();
 
-        try {
-          var data = JSON.parse(text);
-          if(typeof data === 'object' && data !== null) resolve(data);
-          else resolve({ok:false, message:'Resposta inválida do servidor.'});
-        } catch(parseErr) {
-          var preview = text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 180);
-          resolve({ok:false, message:'Resposta inválida do servidor: ' + (preview || parseErr.message)});
-        }
-      })
-      .catch(function(err) {
-        resolve({ok:false, message:'Erro ao invocar servidor: ' + err.message});
+      var token = 'rpc_' + Date.now() + '_' + (++__rpcSeq) + '_' + Math.random().toString(36).slice(2,8);
+      var iframe = document.createElement('iframe');
+      iframe.name = token;
+      iframe.style.display = 'none';
+
+      var form = document.createElement('form');
+      form.method = 'POST';
+      form.action = API_URL;
+      form.target = token;
+      form.style.display = 'none';
+      form.enctype = 'application/x-www-form-urlencoded';
+
+      var inpRpc = document.createElement('input');
+      inpRpc.type = 'hidden';
+      inpRpc.name = 'rpc';
+      inpRpc.value = JSON.stringify({
+        token: token,
+        action: fn,
+        payload: payload === undefined ? null : payload,
+        origin: window.location.origin,
+        ts: Date.now()
       });
+      form.appendChild(inpRpc);
+
+      var inpTransport = document.createElement('input');
+      inpTransport.type = 'hidden';
+      inpTransport.name = 'transport';
+      inpTransport.value = 'iframe';
+      form.appendChild(inpTransport);
+
+      document.body.appendChild(iframe);
+      document.body.appendChild(form);
+
+      __rpcPending[token] = {
+        resolve: resolve,
+        iframe: iframe,
+        form: form,
+        timeoutId: setTimeout(function(){
+          try {
+            if(form.parentNode) form.parentNode.removeChild(form);
+            if(iframe.parentNode) iframe.parentNode.removeChild(iframe);
+          } catch(_) {}
+          delete __rpcPending[token];
+          resolve({ok:false, message:'Tempo esgotado ao comunicar com o servidor.'});
+        }, 120000)
+      };
+
+      form.submit();
     } catch(e) {
       resolve({ok:false, message:'Erro ao invocar servidor: ' + e.message});
     }
