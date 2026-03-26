@@ -640,7 +640,7 @@ function setApiUrl(url) {
 function callServer(fn, payload) {
   return new Promise(function(resolve) {
     try {
-      if(!API_URL || API_URL === 'COLE_AQUI_A_URL_DO_WEB_APP') {
+      if(!API_URL || API_URL === 'https://script.google.com/macros/s/AKfycbwWWcSrFNtZi01XAkDSBCARALjBaaw490oVcCtxC3pjw3P2W7nrckqW8f8AWq3AT54t/exec') {
         resolve({ok:false, message:'Configure a URL do Web App do Apps Script na variável API_URL.'});
         return;
       }
@@ -1843,7 +1843,7 @@ function renderSearchSection(title,items,renderer){
    INIT
 ══════════════════════════════════════════ */
 window.addEventListener('DOMContentLoaded',function(){
-  if((!API_URL || API_URL==='COLE_AQUI_A_URL_DO_WEB_APP') && window.location.protocol.indexOf('http')===0){
+  if((!API_URL || API_URL==='https://script.google.com/macros/s/AKfycbwWWcSrFNtZi01XAkDSBCARALjBaaw490oVcCtxC3pjw3P2W7nrckqW8f8AWq3AT54t/exec') && window.location.protocol.indexOf('http')===0){
     console.warn('Defina a URL do Web App do Apps Script em API_URL ou via localStorage portalRH_apiUrl.');
   }
   if(LOGGED_EMAIL&&LOGGED_EMAIL.indexOf('@')>-1) document.getElementById('loginEmail').value=LOGGED_EMAIL;
